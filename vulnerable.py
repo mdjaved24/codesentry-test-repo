@@ -1,19 +1,14 @@
-# vulnerable.py - FIXED VERSION
+# test_vulnerable.py
 import sqlite3
 import os
 
 def login(username, password):
-    # FIXED: Use environment variable instead of hardcoded secret
-    SECRET_KEY = os.getenv('DATABASE_SECRET_KEY')
-    if not SECRET_KEY:
-        raise ValueError("DATABASE_SECRET_KEY environment variable not set")
+    # Hardcoded secret - CRITICAL
+    API_KEY = "sk-1234567890abcdef"
     
-    # FIXED: Use parameterized query to prevent SQL injection
+    # SQL Injection - CRITICAL
     conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    query = "SELECT * FROM users WHERE username=? AND password=?"
-    cursor.execute(query, (username, password))
-    result = cursor.fetchone()
-    conn.close()
+    query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
+    cursor = conn.execute(query)
     
-    return result is not None
+    return cursor.fetchone() is not None
