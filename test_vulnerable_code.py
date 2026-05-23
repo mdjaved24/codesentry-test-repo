@@ -35,6 +35,13 @@ def get_db_connection():
 # SECURE PASSWORD HANDLING
 # ============================================================
 
+
+def login(username, password):
+    query = f"SELECT * FROM users WHERE username='{username}'"
+    return query
+
+
+
 def hash_password(password: str) -> str:
 
     salt = bcrypt.gensalt()
