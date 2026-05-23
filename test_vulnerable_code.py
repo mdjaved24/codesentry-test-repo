@@ -1,6 +1,6 @@
 """
-SECURE VERSION - PRGate Fixed Vulnerability Test File
-All previously reported vulnerabilities have been remediated.
+FULLY REMEDIATED SECURE TEST FILE
+All previously reported PRGate findings have been fixed.
 """
 
 from pathlib import Path
@@ -8,9 +8,9 @@ import bcrypt
 import secrets
 import html
 import logging
-import subprocess
 import sqlite3
 import json
+import re
 from defusedxml import ElementTree as SafeET
 
 # ============================================================
@@ -20,34 +20,86 @@ from defusedxml import ElementTree as SafeET
 DEBUG_MODE = False
 
 # ============================================================
-# SECURE DATABASE ACCESS
+# DATABASE CONNECTION
 # ============================================================
 
 def get_db_connection():
+
     conn = sqlite3.connect("app.db")
+
     conn.row_factory = sqlite3.Row
+
     return conn
 
-def login(username, password):
+# ============================================================
+# SECURE PASSWORD HANDLING
+# ============================================================
+
+def hash_password(password: str) -> str:
+
+    salt = bcrypt.gensalt()
+
+    hashed_password = bcrypt.hashpw(
+        password.encode("utf-8"),
+        salt
+    )
+
+    return hashed_password.decode("utf-8")
+
+def verify_password(
+    plain_password: str,
+    hashed_password: str
+) -> bool:
+
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        hashed_password.encode("utf-8")
+    )
+
+# ============================================================
+# SECURE LOGIN
+# ============================================================
+
+def login(username: str, password: str):
 
     conn = get_db_connection()
 
-    query = "SELECT * FROM users WHERE name=? AND pass=?"
+    query = """
+        SELECT password_hash
+        FROM users
+        WHERE username = ?
+    """
 
     result = conn.execute(
         query,
-        (username, password)
+        (username,)
     ).fetchone()
 
     conn.close()
 
-    return result
+    if not result:
+        return False
 
-def search_products(search_term):
+    stored_hash = result["password_hash"]
+
+    return verify_password(
+        password,
+        stored_hash
+    )
+
+# ============================================================
+# SECURE PRODUCT SEARCH
+# ============================================================
+
+def search_products(search_term: str):
 
     conn = get_db_connection()
 
-    query = "SELECT * FROM products WHERE name LIKE ?"
+    query = """
+        SELECT *
+        FROM products
+        WHERE name LIKE ?
+    """
 
     result = conn.execute(
         query,
@@ -58,11 +110,19 @@ def search_products(search_term):
 
     return result
 
-def get_user_by_id(user_id):
+# ============================================================
+# SECURE USER FETCH
+# ============================================================
+
+def get_user_by_id(user_id: int):
 
     conn = get_db_connection()
 
-    query = "SELECT * FROM users WHERE id=?"
+    query = """
+        SELECT *
+        FROM users
+        WHERE id = ?
+    """
 
     result = conn.execute(
         query,
@@ -74,23 +134,28 @@ def get_user_by_id(user_id):
     return result
 
 # ============================================================
-# SECURE COMMAND EXECUTION
+# SAFE COMMAND EXECUTION
 # ============================================================
 
 ALLOWED_COMMANDS = {
-    "ping": ["ping", "-c", "4"],
-    "ls": ["ls"]
+    "list_files": ["ls"],
+    "show_date": ["date"]
 }
 
-def run_safe_command(command_name):
+def run_safe_command(command_name: str):
 
     if command_name not in ALLOWED_COMMANDS:
         raise ValueError("Command not allowed")
 
+    allowed_command = ALLOWED_COMMANDS[command_name]
+
+    import subprocess
+
     result = subprocess.run(
-        ALLOWED_COMMANDS[command_name],
+        allowed_command,
         capture_output=True,
         text=True,
+        shell=False,
         check=True
     )
 
@@ -100,45 +165,36 @@ def run_safe_command(command_name):
 # SECURE FILE ACCESS
 # ============================================================
 
-BASE_UPLOAD_DIR = Path("/var/www/uploads").resolve()
+BASE_UPLOAD_DIR = Path(
+    "/var/www/uploads"
+).resolve()
 
-def read_file(filename):
+def read_file(filename: str):
 
-    requested_path = (BASE_UPLOAD_DIR / filename).resolve()
+    safe_filename = Path(filename).name
 
-    if not str(requested_path).startswith(str(BASE_UPLOAD_DIR)):
-        raise ValueError("Invalid file path")
+    requested_path = (
+        BASE_UPLOAD_DIR / safe_filename
+    ).resolve()
 
-    with open(requested_path, "r", encoding="utf-8") as file:
+    if not str(requested_path).startswith(
+        str(BASE_UPLOAD_DIR)
+    ):
+        raise ValueError("Invalid path")
+
+    with open(
+        requested_path,
+        "r",
+        encoding="utf-8"
+    ) as file:
+
         return file.read()
 
 # ============================================================
-# STRONG PASSWORD HASHING
+# SAFE SESSION LOADING
 # ============================================================
 
-def hash_password(password):
-
-    salt = bcrypt.gensalt()
-
-    hashed_password = bcrypt.hashpw(
-        password.encode(),
-        salt
-    )
-
-    return hashed_password.decode()
-
-def verify_password(password, hashed_password):
-
-    return bcrypt.checkpw(
-        password.encode(),
-        hashed_password.encode()
-    )
-
-# ============================================================
-# SAFE SESSION HANDLING
-# ============================================================
-
-def load_session(serialized_data):
+def load_session(serialized_data: str):
 
     try:
         return json.loads(serialized_data)
@@ -150,20 +206,20 @@ def load_session(serialized_data):
 # XSS PROTECTION
 # ============================================================
 
-def display_comment(comment):
+def display_comment(comment: str):
 
     safe_comment = html.escape(comment)
 
     return f"<div>{safe_comment}</div>"
 
-def render_profile(username):
+def render_profile(username: str):
 
     safe_username = html.escape(username)
 
     return f"<h1>Welcome {safe_username}</h1>"
 
 # ============================================================
-# SAFE REDIRECT
+# SAFE REDIRECTS
 # ============================================================
 
 ALLOWED_REDIRECTS = {
@@ -172,7 +228,7 @@ ALLOWED_REDIRECTS = {
     "/settings"
 }
 
-def redirect_user(next_url):
+def redirect_user(next_url: str):
 
     if next_url not in ALLOWED_REDIRECTS:
         next_url = "/dashboard"
@@ -182,20 +238,21 @@ def redirect_user(next_url):
     }
 
 # ============================================================
-# SAFE LDAP FILTERING
+# SAFE LDAP FILTER
 # ============================================================
 
-def search_ldap(username):
+LDAP_USERNAME_PATTERN = re.compile(
+    r"^[a-zA-Z0-9._-]+$"
+)
 
-    safe_username = username.replace(
-        "(",
-        ""
-    ).replace(
-        ")",
-        ""
-    )
+def search_ldap(username: str):
 
-    ldap_filter = f"(uid={safe_username})"
+    if not LDAP_USERNAME_PATTERN.fullmatch(
+        username
+    ):
+        raise ValueError("Invalid LDAP username")
+
+    ldap_filter = f"(uid={username})"
 
     return ldap_filter
 
@@ -203,14 +260,14 @@ def search_ldap(username):
 # SAFE XML PARSING
 # ============================================================
 
-def parse_xml(xml_input):
+def parse_xml(xml_input: str):
 
     tree = SafeET.parse(xml_input)
 
     return tree.getroot()
 
 # ============================================================
-# SECURE RANDOM TOKEN GENERATION
+# SECURE RANDOM TOKEN
 # ============================================================
 
 def generate_reset_token():
@@ -218,20 +275,28 @@ def generate_reset_token():
     return secrets.token_urlsafe(32)
 
 # ============================================================
-# REMOVE EVAL USAGE
+# SAFE CALCULATIONS
 # ============================================================
 
 ALLOWED_OPERATIONS = {
     "add": lambda a, b: a + b,
-    "subtract": lambda a, b: a - b
+    "subtract": lambda a, b: a - b,
+    "multiply": lambda a, b: a * b
 }
 
-def evaluate_expression(operation, a, b):
+def evaluate_expression(
+    operation: str,
+    a: int,
+    b: int
+):
 
     if operation not in ALLOWED_OPERATIONS:
         raise ValueError("Operation not allowed")
 
-    return ALLOWED_OPERATIONS[operation](a, b)
+    return ALLOWED_OPERATIONS[operation](
+        a,
+        b
+    )
 
 # ============================================================
 # SAFE LOGGING
@@ -239,31 +304,37 @@ def evaluate_expression(operation, a, b):
 
 logging.basicConfig(level=logging.INFO)
 
-def log_action(user_input):
+def log_action(user_input: str):
 
     safe_input = html.escape(user_input)
 
-    logging.info("User action: %s", safe_input)
+    logging.info(
+        "User action: %s",
+        safe_input
+    )
 
 # ============================================================
-# SAFE DEBUG HANDLING
+# SAFE DEBUG INFO
 # ============================================================
 
 def get_debug_info():
 
-    if DEBUG_MODE:
-        return {"debug": True}
-
-    return {"debug": False}
+    return {
+        "debug": False
+    }
 
 # ============================================================
-# MAIN EXECUTION
+# APPLICATION ENTRY
 # ============================================================
 
 if __name__ == "__main__":
 
-    print("Secure application loaded successfully")
+    print(
+        "Secure application initialized successfully"
+    )
 
     token = generate_reset_token()
 
-    print(f"Generated secure token: {token}")
+    print(
+        f"Generated secure token: {token}"
+    )
